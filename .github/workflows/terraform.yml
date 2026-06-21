@@ -1,0 +1,85 @@
+name: Terraform GKE Cluster
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'GCP project ID'
+        required: true
+      region:
+        description: 'GCP region'
+        required: true
+        default: 'us-central1'
+      zone:
+        description: 'GCP zone'
+        required: true
+        default: 'us-central1-a'
+      cluster_name:
+        description: 'GKE cluster name'
+        required: true
+        default: 'autopilot-standard-cluster'
+      node_count:
+        description: 'Initial number of nodes'
+        required: true
+        default: '3'
+      min_node_count:
+        description: 'Minimum autoscaled nodes'
+        required: true
+        default: '1'
+      max_node_count:
+        description: 'Maximum autoscaled nodes'
+        required: true
+        default: '3'
+      machine_type:
+        description: 'Machine type for nodes'
+        required: true
+        default: 'e2-medium'
+
+jobs:
+  terraform:
+    name: Create/Update GKE Cluster
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: '1.5.0'
+
+      - name: Configure GCP credentials
+        run: |
+          echo "GOOGLE_CLOUD_KEYFILE_JSON=${{ secrets.GCP_SA_KEY }}" >> $GITHUB_ENV
+          echo "GOOGLE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
+
+      - name: Terraform init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform plan
+        working-directory: terraform
+        run: |
+          terraform plan \
+            -var="project_id=${{ github.event.inputs.project_id }}" \
+            -var="region=${{ github.event.inputs.region }}" \
+            -var="zone=${{ github.event.inputs.zone }}" \
+            -var="cluster_name=${{ github.event.inputs.cluster_name }}" \
+            -var="node_count=${{ github.event.inputs.node_count }}" \
+            -var="min_node_count=${{ github.event.inputs.min_node_count }}" \
+            -var="max_node_count=${{ github.event.inputs.max_node_count }}" \
+            -var="machine_type=${{ github.event.inputs.machine_type }}"
+
+      - name: Terraform apply
+        working-directory: terraform
+        run: |
+          terraform apply -auto-approve \
+            -var="project_id=${{ github.event.inputs.project_id }}" \
+            -var="region=${{ github.event.inputs.region }}" \
+            -var="zone=${{ github.event.inputs.zone }}" \
+            -var="cluster_name=${{ github.event.inputs.cluster_name }}" \
+            -var="node_count=${{ github.event.inputs.node_count }}" \
+            -var="min_node_count=${{ github.event.inputs.min_node_count }}" \
+            -var="max_node_count=${{ github.event.inputs.max_node_count }}" \
+            -var="machine_type=${{ github.event.inputs.machine_type }}"
