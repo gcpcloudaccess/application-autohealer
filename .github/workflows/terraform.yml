@@ -49,10 +49,10 @@ jobs:
         with:
           terraform_version: '1.5.0'
 
-      - name: Configure GCP credentials
-        run: |
-          echo "GOOGLE_CLOUD_KEYFILE_JSON=${{ secrets.GCP_SA_KEY }}" >> $GITHUB_ENV
-          echo "GOOGLE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Terraform init
         working-directory: terraform
