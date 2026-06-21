@@ -13,7 +13,6 @@ env:
   GKE_ZONE: ${{ secrets.GKE_ZONE }}
   NAMESPACE: default
 
-  
 jobs:
   deploy:
     name: Deploy to GKE
