@@ -1,2 +1,2 @@
 anthropic==0.28.0
-httpx==0.26.2
+httpx==0.26.0
