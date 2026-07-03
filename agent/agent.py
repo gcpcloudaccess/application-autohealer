@@ -44,12 +44,6 @@ def ask_claude(pod_info: dict, logs: str, describe: str, events: str) -> dict:
     return json.loads(raw)
 
 
-def derive_deployment_name(pod_name: str) -> str:
-    # strip last two hash segments: <deploy>-<rs-hash>-<pod-hash>
-    parts = pod_name.rsplit("-", 2)
-    return parts[0] if len(parts) == 3 else pod_name
-
-
 def execute_action(plan: dict) -> str:
     action = plan.get("action")
     target = plan.get("target", "")
@@ -60,7 +54,9 @@ def execute_action(plan: dict) -> str:
         return result
 
     elif action == "rollback_deployment":
-        deployment = derive_deployment_name(target)
+        # Claude already returns the deployment name (pod hash suffix stripped)
+        # per the rollback_deployment instructions in the system prompt.
+        deployment = target
         result = rollout_undo(deployment, NAMESPACE)
         log.info("Rolled back deployment %s: %s", deployment, result)
         time.sleep(5)
