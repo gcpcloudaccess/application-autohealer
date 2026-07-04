@@ -1,7 +1,7 @@
 import time
 import logging
 from common import log, NAMESPACE, POLL_INTERVAL
-from tools import get_unhealthy_pods, get_deployment_from_pod, restart_pod, label_deployment, scale_deployment
+from tools import get_unhealthy_pods, get_deployment_from_pod, restart_pod, label_deployment
 
 MARKER_LABEL = "autohealer/repair-needed"
 
@@ -24,9 +24,6 @@ def isolate_pod(pod_info: dict) -> None:
     pod_name = pod_info["pod"]
     result = restart_pod(pod_name, NAMESPACE)
     log.info("Isolated pod %s: %s", pod_name, result)
-    if deployment := get_deployment_from_pod(pod_name, NAMESPACE):
-        scale_result = scale_deployment(deployment, 0, NAMESPACE)
-        log.info("Scaled deployment %s to 0 replicas: %s", deployment, scale_result)
 
 
 def run_once():
