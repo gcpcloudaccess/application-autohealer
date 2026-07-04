@@ -11,6 +11,8 @@ from tools import (
     restart_pod,
     rollout_undo,
     rollout_status,
+    deployment_exists,
+    get_deployment_from_pod,
 )
 from prompts import SYSTEM_PROMPT, build_diagnosis_prompt
 
@@ -44,9 +46,9 @@ def ask_claude(pod_info: dict, logs: str, describe: str, events: str) -> dict:
     return json.loads(raw)
 
 
-def execute_action(plan: dict) -> str:
+def execute_action(plan: dict, pod_info: dict | None = None) -> str:
     action = plan.get("action")
-    target = plan.get("target", "")
+    target = str(plan.get("target", "")).strip()
 
     if action == "restart_pod":
         result = restart_pod(target, NAMESPACE)
@@ -54,9 +56,29 @@ def execute_action(plan: dict) -> str:
         return result
 
     elif action == "rollback_deployment":
-        # Claude already returns the deployment name (pod hash suffix stripped)
-        # per the rollback_deployment instructions in the system prompt.
         deployment = target
+        if deployment.startswith("deployment/"):
+            deployment = deployment.split("/", 1)[1]
+
+        if deployment and not deployment_exists(deployment, NAMESPACE) and pod_info:
+            fallback = get_deployment_from_pod(pod_info["pod"], NAMESPACE)
+            if fallback:
+                log.warning(
+                    "Rollback target %s not found; using deployment %s derived from pod %s",
+                    deployment,
+                    fallback,
+                    pod_info["pod"],
+                )
+                deployment = fallback
+
+        if not deployment and pod_info:
+            deployment = get_deployment_from_pod(pod_info["pod"], NAMESPACE)
+
+        if not deployment:
+            msg = f"Rollback failed: no valid deployment target for {target}"
+            log.error(msg)
+            return msg
+
         result = rollout_undo(deployment, NAMESPACE)
         log.info("Rolled back deployment %s: %s", deployment, result)
         time.sleep(5)
@@ -99,7 +121,7 @@ def run_once():
             continue
 
         log.info("Claude decision: %s", json.dumps(plan, indent=2))
-        result = execute_action(plan)
+        result = execute_action(plan, pod_info)
         log.info("Action result: %s", result)
 
 

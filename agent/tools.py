@@ -59,6 +59,121 @@ def rollout_status(deployment: str, namespace: str = "default") -> str:
     return out or err
 
 
+def deployment_exists(deployment: str, namespace: str = "default") -> bool:
+    _, err, code = _run([
+        "kubectl", "get", "deployment", deployment, "-n", namespace
+    ])
+    return code == 0
+
+
+def get_deployment_replicas(deployment: str, namespace: str = "default") -> int | None:
+    out, err, code = _run([
+        "kubectl", "get", "deployment", deployment, "-n", namespace,
+        "-o", "json"
+    ])
+    if code != 0:
+        return None
+    data = json.loads(out)
+    return data.get("spec", {}).get("replicas")
+
+
+def get_deployment_label(deployment: str, label: str, namespace: str = "default") -> str | None:
+    out, err, code = _run([
+        "kubectl", "get", "deployment", deployment, "-n", namespace,
+        "-o", "json"
+    ])
+    if code != 0:
+        return None
+    data = json.loads(out)
+    return data.get("metadata", {}).get("labels", {}).get(label)
+
+
+def label_deployment(deployment: str, labels: dict[str, str], namespace: str = "default") -> str:
+    args = []
+    for key, value in labels.items():
+        args.append(f"{key}={value}")
+    out, err, code = _run([
+        "kubectl", "label", "deployment", deployment, "-n", namespace,
+        "--overwrite", *args
+    ])
+    if code != 0:
+        return f"Label deployment failed: {err}"
+    return out
+
+
+def remove_deployment_labels(deployment: str, keys: list[str], namespace: str = "default") -> str:
+    args = [f"{key}-" for key in keys]
+    out, err, code = _run([
+        "kubectl", "label", "deployment", deployment, "-n", namespace,
+        "--overwrite", *args
+    ])
+    if code != 0:
+        return f"Remove labels failed: {err}"
+    return out
+
+
+def get_deployments_with_label(label_selector: str, namespace: str = "default") -> list[str]:
+    out, err, code = _run([
+        "kubectl", "get", "deployments", "-n", namespace,
+        "-l", label_selector,
+        "-o", "json"
+    ])
+    if code != 0:
+        return []
+    data = json.loads(out)
+    return [item["metadata"]["name"] for item in data.get("items", [])]
+
+
+def scale_deployment(deployment: str, replicas: int, namespace: str = "default") -> str:
+    out, err, code = _run([
+        "kubectl", "scale", "deployment", deployment,
+        f"--replicas={replicas}", "-n", namespace
+    ])
+    if code != 0:
+        return f"Scale deployment failed: {err}"
+    return out
+
+
+def get_pods_for_deployment(deployment: str, namespace: str = "default") -> list[dict]:
+    data = get_pods(namespace)
+    if "error" in data:
+        return []
+    pods = []
+    for pod in data.get("items", []):
+        name = pod["metadata"]["name"]
+        if get_deployment_from_pod(name, namespace) == deployment:
+            pods.append(pod)
+    return pods
+
+
+def get_deployment_from_pod(pod_name: str, namespace: str = "default") -> str | None:
+    out, err, code = _run([
+        "kubectl", "get", "pod", pod_name, "-n", namespace, "-o", "json"
+    ])
+    if code != 0:
+        return None
+
+    pod = json.loads(out)
+    owner_refs = pod.get("metadata", {}).get("ownerReferences", [])
+    for owner in owner_refs:
+        kind = owner.get("kind")
+        name = owner.get("name")
+        if kind == "Deployment":
+            return name
+        if kind == "ReplicaSet":
+            rs_out, rs_err, rs_code = _run([
+                "kubectl", "get", "replicaset", name, "-n", namespace, "-o", "json"
+            ])
+            if rs_code != 0:
+                continue
+            rs = json.loads(rs_out)
+            rs_owners = rs.get("metadata", {}).get("ownerReferences", [])
+            for rs_owner in rs_owners:
+                if rs_owner.get("kind") == "Deployment":
+                    return rs_owner.get("name")
+    return None
+
+
 def get_events(namespace: str = "default") -> str:
     out, err, _ = _run([
         "kubectl", "get", "events", "-n", namespace,

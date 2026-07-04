@@ -17,7 +17,7 @@ Your response must be a JSON object with exactly these fields:
 
 Action guide:
 - restart_pod: Use for CrashLoopBackOff caused by transient errors (OOM, config reload, race condition). Pod name as target.
-- rollback_deployment: Use when the failure started after a recent deployment/image change. Deployment name (strip pod hash suffix) as target.
+- rollback_deployment: Use when the failure started after a recent deployment/image change. Full deployment name as target.
 - escalate: Use when the cause is unclear or requires human intervention (e.g., missing secrets, persistent volume issues, code bugs needing a fix).
 - no_action: Use if the pod recovered on its own or the issue is not actionable.
 
