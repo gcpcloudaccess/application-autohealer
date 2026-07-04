@@ -6,10 +6,9 @@ from tools import get_unhealthy_pods, get_deployment_from_pod, restart_pod, labe
 MARKER_LABEL = "autohealer/repair-needed"
 
 
-def mark_for_repair(pod_info: dict) -> None:
-    deployment = get_deployment_from_pod(pod_info["pod"], NAMESPACE)
+def mark_for_repair(deployment: str, pod_info: dict) -> None:
     if not deployment:
-        log.warning("No deployment found for pod %s", pod_info["pod"])
+        log.warning("No deployment found to mark for pod %s", pod_info["pod"])
         return
 
     labels = {
@@ -20,10 +19,12 @@ def mark_for_repair(pod_info: dict) -> None:
     log.info("Marked deployment %s for repair: %s", deployment, result)
 
 
-def isolate_pod(pod_info: dict) -> None:
+def isolate_pod(pod_info: dict) -> str | None:
+    deployment = get_deployment_from_pod(pod_info["pod"], NAMESPACE)
     pod_name = pod_info["pod"]
     result = restart_pod(pod_name, NAMESPACE)
     log.info("Isolated pod %s: %s", pod_name, result)
+    return deployment
 
 
 def run_once():
@@ -35,8 +36,8 @@ def run_once():
 
     for pod_info in unhealthy:
         log.warning("Unhealthy pod detected: %s", pod_info)
-        isolate_pod(pod_info)
-        mark_for_repair(pod_info)
+        deployment = isolate_pod(pod_info)
+        mark_for_repair(deployment, pod_info)
 
 
 if __name__ == "__main__":
