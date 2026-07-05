@@ -5,6 +5,8 @@ metadata:
   namespace: autohealer
   labels:
     app: backend
+    autohealer/repair-needed: "false"
+    autohealer/failure-reason: "none"
 spec:
   replicas: 1
   selector:
@@ -14,6 +16,8 @@ spec:
     metadata:
       labels:
         app: backend
+        autohealer/repair-needed: "false"
+        autohealer/failure-reason: "none"
     spec:
       containers:
         - name: backend

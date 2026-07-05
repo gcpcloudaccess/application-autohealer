@@ -23,6 +23,8 @@ When a recoverable app failure happens, the agents should do the following:
 
 ## How to test auto-repair
 
+Application endpoint : http://35.188.223.248:8000/health
+
 Use a recoverable failure in the `autohealer` namespace:
 
 ```bash
