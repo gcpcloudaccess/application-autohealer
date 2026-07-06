@@ -1,0 +1,12 @@
+{
+  "name": "autopilot-backend",
+  "version": "2.0.0",
+  "description": "Node.js data entry admin app with a React (UMD, no build step) frontend.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
