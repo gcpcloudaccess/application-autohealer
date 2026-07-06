@@ -96,9 +96,11 @@ def repair_deployment(deployment: str, pod_info: dict) -> str:
     action = plan.get("action")
     target = str(plan.get("target", "")).strip()
 
+    succeeded = False
     if action == "restart_pod":
-        result = restart_pod(pod, NAMESPACE)
-        log.info("Restarted pod %s: %s", pod, result)
+        result = restart_pod(pod_name, NAMESPACE)
+        log.info("Restarted pod %s: %s", pod_name, result)
+        succeeded = not result.startswith("Failed to delete pod")
     elif action == "rollback_deployment":
         deployment_name = target or deployment
         if deployment_name.startswith("deployment/"):
@@ -107,9 +109,11 @@ def repair_deployment(deployment: str, pod_info: dict) -> str:
             deployment_name = deployment
         result = rollout_undo(deployment_name, NAMESPACE)
         log.info("Rolled back deployment %s: %s", deployment_name, result)
-        time.sleep(5)
-        status = rollout_status(deployment_name, NAMESPACE)
-        result = f"{result}\n{status}"
+        succeeded = not result.startswith("Rollback failed")
+        if succeeded:
+            time.sleep(5)
+            status = rollout_status(deployment_name, NAMESPACE)
+            result = f"{result}\n{status}"
     elif action == "escalate":
         result = f"ESCALATION REQUIRED for {deployment}: {plan.get('reason')}"
         log.warning(result)
@@ -117,9 +121,11 @@ def repair_deployment(deployment: str, pod_info: dict) -> str:
         result = "no_action"
         log.info("No action taken for deployment %s.", deployment)
 
-    if action in ("restart_pod", "rollback_deployment"):
+    if action in ("restart_pod", "rollback_deployment") and succeeded:
         remove_deployment_labels(deployment, [MARKER_LABEL, "autohealer/failure-reason"], NAMESPACE)
         log.info("Cleared repair labels for deployment %s", deployment)
+    elif action in ("restart_pod", "rollback_deployment") and not succeeded:
+        log.warning("Repair action %s failed for %s, leaving repair-needed label in place: %s", action, deployment, result)
 
     rag_store.add_case(
         deployment=deployment,
