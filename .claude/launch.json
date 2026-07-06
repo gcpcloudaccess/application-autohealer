@@ -6,7 +6,10 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["server.js"],
       "cwd": "backend",
-      "port": 8000
+      "port": 8000,
+      "env": {
+        "RAG_SERVICE_URL": "http://localhost:8001/rag"
+      }
     }
   ]
 }
