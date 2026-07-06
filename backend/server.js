@@ -2,7 +2,6 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const url = require("url");
 
 const PORT = process.env.PORT || 8000;
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -79,7 +78,7 @@ function validateRecord(input) {
 }
 
 function serveStatic(req, res) {
-  const parsed = url.parse(req.url);
+  const parsed = new URL(req.url, "http://localhost");
   let filePath = parsed.pathname === "/" ? "/index.html" : parsed.pathname;
   filePath = path.join(PUBLIC_DIR, path.normalize(filePath).replace(/^(\.\.[\/\\])+/, ""));
 
@@ -149,7 +148,7 @@ function handleApi(req, res, pathname) {
 }
 
 const server = http.createServer((req, res) => {
-  const parsed = url.parse(req.url);
+  const parsed = new URL(req.url, "http://localhost");
   const pathname = parsed.pathname;
 
   if (req.method === "OPTIONS") {
