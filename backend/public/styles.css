@@ -271,6 +271,69 @@ th {
   overflow-y: auto;
 }
 
+.timeline-hint {
+  color: #64748b;
+  font-size: 0.78rem;
+  margin-bottom: 0.8rem;
+}
+
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.timeline-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.timeline-agent {
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  letter-spacing: 0.03em;
+}
+
+.agent-isolator {
+  background: #1e3a5f;
+  color: #93c5fd;
+}
+
+.agent-repairer {
+  background: #3b1e5f;
+  color: #c4b5fd;
+}
+
+.timeline-step {
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.timeline-message {
+  color: #e2e8f0;
+  flex: 1;
+  min-width: 200px;
+}
+
+.timeline-time {
+  color: #64748b;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   .app-header {
     flex-direction: column;

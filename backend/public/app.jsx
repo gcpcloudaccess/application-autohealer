@@ -271,6 +271,74 @@ function RagMemory() {
   );
 }
 
+function Timeline() {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [warnings, setWarnings] = useState([]);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/timeline");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load timeline.");
+      setEvents(Array.isArray(data.events) ? data.events : []);
+      setWarnings(data.warnings || []);
+      setError("");
+    } catch (e) {
+      setError(e.message);
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="card">
+      <div className="dashboard-header">
+        <h2>Live Timeline ({events.length})</h2>
+        <div className="dashboard-actions">
+          <button type="button" onClick={refresh} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="alert">
+          {error} (Reachable only when running inside the cluster, alongside the isolator and repairer services.)
+        </div>
+      )}
+      {!error && warnings.length > 0 && (
+        <div className="alert">Partial data — {warnings.join("; ")}</div>
+      )}
+
+      <p className="timeline-hint">Auto-refreshes every 5 seconds while this tab is open.</p>
+
+      <div className="timeline-list">
+        {!error && events.length === 0 && (
+          <p className="empty-state">{loading ? "Loading..." : "No activity recorded yet."}</p>
+        )}
+        {events.map((e, i) => (
+          <div className="timeline-item" key={i}>
+            <span className={"timeline-agent agent-" + e.agent}>{e.agent}</span>
+            <span className="timeline-step">{e.step}</span>
+            <span className="timeline-message">{e.message}</span>
+            <span className="timeline-time">{new Date(e.timestamp).toLocaleTimeString()}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [tab, setTab] = useState("form");
   const { records, loading, error, refresh, setRecords } = useRecords();
@@ -298,6 +366,9 @@ function App() {
           <button className={tab === "rag" ? "tab active" : "tab"} onClick={() => setTab("rag")}>
             RAG Memory
           </button>
+          <button className={tab === "timeline" ? "tab active" : "tab"} onClick={() => setTab("timeline")}>
+            Live Timeline
+          </button>
         </nav>
       </header>
 
@@ -307,6 +378,7 @@ function App() {
           <Dashboard records={records} loading={loading} error={error} refresh={refresh} onDeleted={handleDeleted} />
         )}
         {tab === "rag" && <RagMemory />}
+        {tab === "timeline" && <Timeline />}
       </main>
     </div>
   );

@@ -10,6 +10,10 @@ const RECORDS_FILE = path.join(DATA_DIR, "records.json");
 const MAX_NOTES_LENGTH = 2000;
 const RAG_SERVICE_URL =
   process.env.RAG_SERVICE_URL || "http://autopilot-repairer.autohealer.svc.cluster.local:8001/rag";
+const REPAIRER_EVENTS_URL =
+  process.env.REPAIRER_EVENTS_URL || "http://autopilot-repairer.autohealer.svc.cluster.local:8001/events";
+const ISOLATOR_EVENTS_URL =
+  process.env.ISOLATOR_EVENTS_URL || "http://autopilot-isolator.autohealer.svc.cluster.local:8002/events";
 
 const MIME_TYPES = {
   ".html": "text/html",
@@ -46,14 +50,18 @@ function sendJSON(res, statusCode, payload) {
 }
 
 function readBody(req, callback) {
-  let data = "";
+  const chunks = [];
+  let length = 0;
   req.on("data", (chunk) => {
-    data += chunk;
-    if (data.length > 1e6) {
+    length += chunk.length;
+    if (length > 1e6) {
       req.destroy();
+      return;
     }
+    chunks.push(chunk);
   });
   req.on("end", () => {
+    const data = Buffer.concat(chunks).toString("utf-8");
     if (!data) return callback(null, {});
     try {
       callback(null, JSON.parse(data));
@@ -79,13 +87,13 @@ function validateRecord(input) {
   return { errors, value: { name, dob, jobTitle, notes } };
 }
 
-function fetchRagData() {
+function fetchJSON(url) {
   return new Promise((resolve) => {
     let target;
     try {
-      target = new URL(RAG_SERVICE_URL);
+      target = new URL(url);
     } catch (e) {
-      return resolve({ ok: false, error: "Invalid RAG_SERVICE_URL." });
+      return resolve({ ok: false, error: `Invalid URL: ${url}` });
     }
 
     const req = http.get(
@@ -96,28 +104,54 @@ function fetchRagData() {
         timeout: 3000,
       },
       (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
         res.on("end", () => {
+          const data = Buffer.concat(chunks).toString("utf-8");
           if (res.statusCode !== 200) {
-            return resolve({ ok: false, error: `RAG service returned ${res.statusCode}.` });
+            return resolve({ ok: false, error: `Service returned ${res.statusCode}.` });
           }
           try {
             resolve({ ok: true, data: JSON.parse(data) });
           } catch (e) {
-            resolve({ ok: false, error: "Invalid response from RAG service." });
+            resolve({ ok: false, error: "Invalid response from service." });
           }
         });
       }
     );
     req.on("timeout", () => {
       req.destroy();
-      resolve({ ok: false, error: "RAG service request timed out." });
+      resolve({ ok: false, error: "Request timed out." });
     });
     req.on("error", (err) => {
-      resolve({ ok: false, error: `RAG service unreachable: ${err.message}` });
+      resolve({ ok: false, error: `Service unreachable: ${err.message}` });
     });
   });
+}
+
+function fetchRagData() {
+  return fetchJSON(RAG_SERVICE_URL);
+}
+
+async function fetchTimeline() {
+  const [isolatorResult, repairerResult] = await Promise.all([
+    fetchJSON(ISOLATOR_EVENTS_URL),
+    fetchJSON(REPAIRER_EVENTS_URL),
+  ]);
+
+  const errors = [];
+  let events = [];
+  if (isolatorResult.ok) events = events.concat(isolatorResult.data);
+  else errors.push(`isolator: ${isolatorResult.error}`);
+  if (repairerResult.ok) events = events.concat(repairerResult.data);
+  else errors.push(`repairer: ${repairerResult.error}`);
+
+  events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  if (!isolatorResult.ok && !repairerResult.ok) {
+    return { ok: false, error: errors.join("; ") };
+  }
+  return { ok: true, data: events, warnings: errors.length ? errors : undefined };
 }
 
 function serveStatic(req, res) {
@@ -155,6 +189,12 @@ async function handleApi(req, res, pathname) {
     const result = await fetchRagData();
     if (!result.ok) return sendJSON(res, 502, { error: result.error });
     return sendJSON(res, 200, result.data);
+  }
+
+  if (pathname === "/api/timeline" && req.method === "GET") {
+    const result = await fetchTimeline();
+    if (!result.ok) return sendJSON(res, 502, { error: result.error });
+    return sendJSON(res, 200, { events: result.data, warnings: result.warnings });
   }
 
   if (pathname === "/api/records" && req.method === "GET") {

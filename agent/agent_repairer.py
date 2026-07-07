@@ -21,11 +21,13 @@ from tools import (
     get_rollout_revision_count,
 )
 from prompts import SYSTEM_PROMPT, build_diagnosis_prompt
+from event_log import EventLog
 
 MARKER_LABEL = "autohealer/repair-needed"
 RAG_STORAGE_DIR = os.getenv("RAG_STORAGE_DIR", "/tmp/repair-rag")
 RAG_HTTP_PORT = int(os.getenv("RAG_HTTP_PORT", "8001"))
 rag_store = RepairRAGStore(storage_dir=RAG_STORAGE_DIR)
+event_log = EventLog()
 
 
 class RagRequestHandler(BaseHTTPRequestHandler):
@@ -45,6 +47,13 @@ class RagRequestHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+        elif self.path.startswith("/events"):
+            body = json.dumps(event_log.recent(limit=100)).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
         elif self.path.startswith("/health"):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -122,20 +131,35 @@ def repair_deployment(deployment: str, pods: list[dict]) -> str:
         "restarts": pod.get("status", {}).get("containerStatuses", [{}])[0].get("restartCount", 0),
         "container": pod.get("spec", {}).get("containers", [{}])[0].get("name", ""),
     }
+    event_log.add(
+        "repairer", "picked_up",
+        f"Picked up deployment {deployment} (pod {pod_name}, reason: {pod_info['reason']}).",
+        deployment=deployment, pod=pod_name, reason=pod_info["reason"],
+    )
+
     logs = get_pod_logs(pod_name, NAMESPACE)
     describe = describe_pod(pod_name, NAMESPACE)
     events = get_events(NAMESPACE)
     revision_count = get_rollout_revision_count(deployment, NAMESPACE)
 
+    event_log.add("repairer", "diagnosing", f"Asking Claude to diagnose {deployment}...", deployment=deployment)
+
     try:
         plan = ask_claude(pod_info, logs, describe, events, revision_count)
     except Exception as e:
         log.error("Claude API error for deployment %s: %s", deployment, e)
+        event_log.add("repairer", "error", f"Claude API error for {deployment}: {e}", deployment=deployment)
         return str(e)
 
     log.info("Repair decision: %s", json.dumps(plan, indent=2))
     action = plan.get("action")
     target = str(plan.get("target", "")).strip()
+
+    event_log.add(
+        "repairer", "decision",
+        f"Decision for {deployment}: {action} — {plan.get('reason', '')}",
+        deployment=deployment, action=action, analysis=plan.get("analysis", ""),
+    )
 
     if action == "rollback_deployment" and revision_count <= 1:
         log.warning(
@@ -145,6 +169,11 @@ def repair_deployment(deployment: str, pods: list[dict]) -> str:
         )
         action = "escalate"
         plan["reason"] = f"{plan.get('reason', '')} (downgraded from rollback_deployment: no prior revision available)"
+        event_log.add(
+            "repairer", "downgraded",
+            f"Downgraded rollback_deployment to escalate for {deployment} — no prior revision available.",
+            deployment=deployment,
+        )
 
     succeeded = False
     if action == "restart_pod":
@@ -171,11 +200,25 @@ def repair_deployment(deployment: str, pods: list[dict]) -> str:
         result = "no_action"
         log.info("No action taken for deployment %s.", deployment)
 
+    event_log.add(
+        "repairer", "action_result",
+        f"{action} for {deployment}: {result.splitlines()[0] if result else result}",
+        deployment=deployment, action=action, succeeded=succeeded,
+    )
+
     if action == "no_action" or (action in ("restart_pod", "rollback_deployment") and succeeded):
         remove_deployment_labels(deployment, [MARKER_LABEL, "autohealer/failure-reason"], NAMESPACE)
         log.info("Cleared repair labels for deployment %s", deployment)
+        event_log.add("repairer", "labels_cleared", f"Cleared repair labels for {deployment}.", deployment=deployment)
     elif action in ("restart_pod", "rollback_deployment") and not succeeded:
         log.warning("Repair action %s failed for %s, leaving repair-needed label in place: %s", action, deployment, result)
+        event_log.add(
+            "repairer", "labels_kept",
+            f"{action} failed for {deployment}, repair-needed label left in place.",
+            deployment=deployment,
+        )
+    elif action == "escalate":
+        event_log.add("repairer", "labels_kept", f"Escalated {deployment}, repair-needed label left in place for a human.", deployment=deployment)
 
     rag_store.add_case(
         deployment=deployment,

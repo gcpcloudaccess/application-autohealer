@@ -59,6 +59,8 @@ spec:
         - name: agent-isolator
           image: gcr.io/auto-app-healer/autopilot-agent:latest
           command: ["python", "agent_isolator.py"]
+          ports:
+            - containerPort: 8002
           env:
             - name: NAMESPACE
               value: "autohealer"
@@ -116,4 +118,17 @@ spec:
   ports:
     - port: 8001
       targetPort: 8001
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autopilot-isolator
+  namespace: autohealer
+spec:
+  selector:
+    app: autopilot-isolator
+  ports:
+    - port: 8002
+      targetPort: 8002
   type: ClusterIP

@@ -21,9 +21,8 @@ Self-healing Kubernetes demo on GKE. Two agents watch the cluster and use Claude
 | Crash on startup | `kubectl patch deployment backend -n autohealer --patch-file k8s/demo-patches/crash-command.json` | Rolled back or escalated |
 | Broken liveness probe | `kubectl patch deployment backend -n autohealer --patch-file k8s/demo-patches/broken-liveness.json` | Rolled back or escalated |
 | OOM (memory squeeze) | `kubectl patch deployment backend -n autohealer --patch-file k8s/demo-patches/oom-memory.json` | Rolled back or escalated |
-| Bad env var | `kubectl set env deployment/backend BAD_CONFIG=1 -n autohealer` | Rolled back or escalated |
 
-Run one at a time, revert before trying the next.
+Run one at a time, revert before trying the next. (There's no "bad env var" row — `backend/server.js` doesn't read any config env var, so setting one is a no-op on the real app; that logic only existed in the removed `bad-config-simulator`.)
 
 ## Useful commands
 
