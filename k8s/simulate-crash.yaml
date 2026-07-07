@@ -22,25 +22,3 @@ spec:
         - name: crash-simulator
           image: busybox
           command: ["sh", "-c", "echo 'Simulated crash: OOMKilled'; exit 1"]
----
-# Simulate a failed deployment — uses a non-existent image tag
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: bad-deploy-simulator
-  namespace: autohealer
-  labels:
-    app: bad-deploy-simulator
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: bad-deploy-simulator
-  template:
-    metadata:
-      labels:
-        app: bad-deploy-simulator
-    spec:
-      containers:
-        - name: bad-deploy-simulator
-          image: nginx:this-tag-does-not-exist

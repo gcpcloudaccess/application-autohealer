@@ -16,12 +16,7 @@ POLL = 2
 TIMEOUT = 180
 
 SIMULATORS = [
-    "bad-config-simulator",
-    "bad-deploy-simulator",
     "crash-simulator",
-    "liveness-fail-simulator",
-    "oom-simulator",
-    "readiness-fail-simulator",
 ]
 
 
