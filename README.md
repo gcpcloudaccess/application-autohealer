@@ -12,6 +12,7 @@ Self-healing Kubernetes demo on GKE. Two agents watch the cluster and use Claude
 3. Watch it recover (or escalate) in k9s / repairer logs.
 4. Revert: `kubectl rollout undo deployment/backend -n autohealer`
 
+
 ## Error injection commands (`backend`)
 
 | Failure | Command | Expected |
