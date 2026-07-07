@@ -33,7 +33,6 @@ kubectl get svc -n autohealer backend
 
 ```bash
 kubectl set image deployment/backend backend=gcr.io/auto-app-healer/autopilot-backend:invalidtag -n autohealer
-```
 
 Watch it recover:
 ```bash
