@@ -18,6 +18,7 @@ from tools import (
     deployment_exists,
     get_deployment_from_pod,
     remove_deployment_labels,
+    get_rollout_revision_count,
 )
 from prompts import SYSTEM_PROMPT, build_diagnosis_prompt
 
@@ -63,12 +64,12 @@ def start_rag_http_server():
     server.serve_forever()
 
 
-def ask_claude(pod_info: dict, logs: str, describe: str, events: str) -> dict:
+def ask_claude(pod_info: dict, logs: str, describe: str, events: str, revision_count: int = 0) -> dict:
     similar_cases = rag_store.search(
         f"{pod_info.get('reason', '')} {logs[:1000]} {describe[:1000]}",
         limit=3,
     )
-    user_msg = build_diagnosis_prompt(pod_info, logs, describe, events, similar_cases)
+    user_msg = build_diagnosis_prompt(pod_info, logs, describe, events, similar_cases, revision_count)
     response = client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=512,
@@ -112,21 +113,22 @@ def _choose_repair_pod(pods: list[dict]) -> dict:
     return pods[0]
 
 
-def repair_deployment(deployment: str, pod_info: dict) -> str:
-    pods = get_pods_for_deployment(deployment, NAMESPACE)
-    if not pods:
-        msg = f"No pods found for deployment {deployment}."
-        log.warning(msg)
-        return msg
-
+def repair_deployment(deployment: str, pods: list[dict]) -> str:
     pod = _choose_repair_pod(pods)
     pod_name = pod["metadata"]["name"]
+    pod_info = {
+        "pod": pod_name,
+        "reason": _pod_status_reason(pod),
+        "restarts": pod.get("status", {}).get("containerStatuses", [{}])[0].get("restartCount", 0),
+        "container": pod.get("spec", {}).get("containers", [{}])[0].get("name", ""),
+    }
     logs = get_pod_logs(pod_name, NAMESPACE)
     describe = describe_pod(pod_name, NAMESPACE)
     events = get_events(NAMESPACE)
+    revision_count = get_rollout_revision_count(deployment, NAMESPACE)
 
     try:
-        plan = ask_claude(pod_info, logs, describe, events)
+        plan = ask_claude(pod_info, logs, describe, events, revision_count)
     except Exception as e:
         log.error("Claude API error for deployment %s: %s", deployment, e)
         return str(e)
@@ -134,6 +136,15 @@ def repair_deployment(deployment: str, pod_info: dict) -> str:
     log.info("Repair decision: %s", json.dumps(plan, indent=2))
     action = plan.get("action")
     target = str(plan.get("target", "")).strip()
+
+    if action == "rollback_deployment" and revision_count <= 1:
+        log.warning(
+            "Repairer chose rollback_deployment for %s but no prior revision exists (revision_count=%d); "
+            "downgrading to escalate instead of attempting a rollback that cannot succeed.",
+            deployment, revision_count,
+        )
+        action = "escalate"
+        plan["reason"] = f"{plan.get('reason', '')} (downgraded from rollback_deployment: no prior revision available)"
 
     succeeded = False
     if action == "restart_pod":
@@ -190,15 +201,8 @@ def run_once():
             log.warning("No pods for deployment %s, skipping repair.", deployment)
             continue
 
-        pod = pods[0]
-        pod_info = {
-            "pod": pod["metadata"]["name"],
-            "reason": pod.get("status", {}).get("phase", "Unknown"),
-            "restarts": pod.get("status", {}).get("containerStatuses", [{}])[0].get("restartCount", 0),
-            "container": pod.get("spec", {}).get("containers", [{}])[0].get("name", ""),
-        }
-        log.info("Repairing deployment %s with pod %s", deployment, pod_info["pod"])
-        result = repair_deployment(deployment, pod_info)
+        log.info("Repairing deployment %s", deployment)
+        result = repair_deployment(deployment, pods)
         log.info("Repair result for %s: %s", deployment, result)
 
 

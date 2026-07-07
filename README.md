@@ -11,6 +11,8 @@ This repository contains an automated Kubernetes self-healing demo running on GK
 - `frontend/` is a static demo page.
 - `k8s/` contains Kubernetes manifests for the namespace, app workloads, agents, and failure simulators.
 
+k9s -n autohealer
+
 ## Auto-healing flow
 
 When a recoverable app failure happens, the agents should do the following:
@@ -34,6 +36,20 @@ Trigger a bad image on the backend deployment:
 
 ```bash
 kubectl set image deployment/backend backend=gcr.io/auto-app-healer/autopilot-backend:invalidtag -n autohealer
+# Bad image tag (like you already did)
+kubectl set image deployment/backend backend=gcr.io/auto-app-healer/autopilot-backend:badtag -n autohealer
+
+# Force a crash by overriding the command
+kubectl patch deployment backend -n autohealer -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","command":["sh","-c","exit 1"]}]}}}}'
+
+# Break its liveness probe
+kubectl patch deployment backend -n autohealer -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","livenessProbe":{"exec":{"command":["false"]},"periodSeconds":5}}]}}}}'
+
+# Squeeze its memory limit down to force OOM
+kubectl patch deployment backend -n autohealer -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","resources":{"limits":{"memory":"10Mi"}}}]}}}}'
+
+# Bad env var
+kubectl set env deployment/backend BAD_CONFIG=1 -n autohealer
 ```
 
 Watch the pod cycle through the failure and recovery:

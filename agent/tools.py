@@ -66,6 +66,17 @@ def deployment_exists(deployment: str, namespace: str = "default") -> bool:
     return code == 0
 
 
+def get_rollout_revision_count(deployment: str, namespace: str = "default") -> int:
+    out, err, code = _run([
+        "kubectl", "rollout", "history", f"deployment/{deployment}", "-n", namespace
+    ])
+    if code != 0:
+        return 0
+    lines = [line for line in out.strip().splitlines() if line.strip()]
+    revisions = [line for line in lines if line[:1].isdigit()]
+    return len(revisions)
+
+
 def get_deployment_replicas(deployment: str, namespace: str = "default") -> int | None:
     out, err, code = _run([
         "kubectl", "get", "deployment", deployment, "-n", namespace,

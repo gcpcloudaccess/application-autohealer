@@ -18,8 +18,8 @@ Your response must be a JSON object with exactly these fields:
 
 Action guide:
 - restart_pod: Use for CrashLoopBackOff caused by transient errors (OOM, config reload, race condition). Pod name as target.
-- rollback_deployment: Use when the failure started after a recent deployment/image change. Full deployment name as target.
-- escalate: Use when the cause is unclear or requires human intervention (e.g., missing secrets, persistent volume issues, code bugs needing a fix).
+- rollback_deployment: Use when the failure started after a recent deployment/image change AND "Rollback available" below is yes. Full deployment name as target. If "Rollback available" is no, do not choose this action.
+- escalate: Use when the cause is unclear or requires human intervention (e.g., missing secrets, persistent volume issues, code bugs needing a fix, or a deployment/image regression with no rollback available).
 - no_action: Use if the pod recovered on its own or the issue is not actionable.
 
 Be concise and decisive. Do not ask for more information.
@@ -32,6 +32,7 @@ def build_diagnosis_prompt(
     describe: str,
     events: str,
     similar_cases: list[dict] | None = None,
+    rollback_revision_count: int = 0,
 ) -> str:
     similar_context = ""
     if similar_cases:
@@ -42,11 +43,14 @@ def build_diagnosis_prompt(
             ]
         )
 
+    rollback_available = "yes" if rollback_revision_count > 1 else "no"
+
     return f"""
 Pod: {pod_info['pod']}
 Failure Reason: {pod_info['reason']}
 Restart Count: {pod_info['restarts']}
 Container: {pod_info['container']}
+Rollback available: {rollback_available} ({rollback_revision_count} revision(s) in rollout history)
 
 --- Similar Past Repair Cases ---
 {similar_context or 'None'}
